@@ -24,6 +24,9 @@ jobs:
           host: ${{ secrets.VM_IP }}
           username: ${{ secrets.VM_USER }}
           password: ${{ secrets.VM_PASS }}
+          envs: |
+           IMAGE_TAG=${{ github.event.workflow_run.head_commit.id }}
+           DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }}
           script: |
             echo "Deploying Docker image with tag: $IMAGE_TAG"
             helm upgrade --install demoapp ./demoapp-chart \
