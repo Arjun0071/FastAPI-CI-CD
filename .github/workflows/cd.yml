@@ -1,0 +1,31 @@
+name: CD - Deploy FastApi using Helm
+
+on:
+  workflow_run:
+    workflows: ["CI- Build and push the Docker Image"]
+    types:
+      - completed
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@V3
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.1.0
+        with:
+          host: ${{ secrets.VM_IP }}
+          username: ${{ secrets.VM_USER }}
+          password: ${{ secrets.VM_PASS }}
+          script: |
+            cd /path/to/project
+            IMAGE_TAG=$(echo ${{ github.event.workflow_run.head_commit.id }})
+            helm upgrade --install demoapp ./demoapp-chart \
+              --set image.repository=${{ secrets.DOCKERHUB_USERNAME }}/fastapi-demo \
+              --set image.tag=$IMAGE_TAG \
+              --set image.pullPolicy=Always
+
