@@ -24,10 +24,7 @@ jobs:
           host: ${{ secrets.VM_IP }}
           username: ${{ secrets.VM_USER }}
           password: ${{ secrets.VM_PASS }}
-          envs: |
-           IMAGE_TAG=${{ github.event.workflow_run.head_commit.id }}
           script: |
-            echo "Deploying Docker image with tag: $IMAGE_TAG"
             helm upgrade --install demoapp ./demoapp-chart \
               --set image.repository=${{ secrets.DOCKERHUB_USERNAME }}/fastapi-demo \
               --set image.tag=${{ IMAGE_TAG }} \
