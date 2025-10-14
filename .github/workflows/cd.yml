@@ -27,6 +27,6 @@ jobs:
           script: |
             helm upgrade --install demoapp ./demoapp-chart \
               --set image.repository=${{ secrets.DOCKERHUB_USERNAME }}/fastapi-demo \
-              --set image.tag=${{ IMAGE_TAG }} \
+              --set image.tag=${{ github.event.workflow_run.head_commit.id }} \
               --set image.pullPolicy=Always
 
