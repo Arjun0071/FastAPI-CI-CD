@@ -14,26 +14,42 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
+      # -----------------------------
+      # Set up SSH key for VM access
+      # -----------------------------
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VM_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          echo -e "Host *\n\tStrictHostKeyChecking no\n" > ~/.ssh/config
+
+      # -----------------------------
+      # Copy Helm chart to VM
+      # -----------------------------
       - name: Copy Helm chart to VM
         uses: appleboy/scp-action@master
         with:
           host: ${{ secrets.VM_IP }}
           username: ${{ secrets.VM_USER }}
-          key: ${{ secrets.VM_SSH_KEY }}
+          key: ~/.ssh/id_rsa
           source: "./demoapp-chart"
           target: "/home/${{ secrets.VM_USER }}/"
-          scp_options: "-o StrictHostKeyChecking=no"
 
-      - name: Deploy via SSH
+      # -----------------------------
+      # Deploy via SSH using Helm
+      # -----------------------------
+      - name: Deploy FastAPI app via SSH
         uses: appleboy/ssh-action@v1.1.0
         with:
           host: ${{ secrets.VM_IP }}
           username: ${{ secrets.VM_USER }}
-          key: ${{ secrets.VM_SSH_KEY }}
+          key: ~/.ssh/id_rsa
           script: |
-            helm upgrade --install demoapp ./demoapp-chart \
+            cd /home/${{ secrets.VM_USER }}/demoapp-chart
+            helm upgrade --install demoapp . \
               --set image.repository=${{ secrets.DOCKERHUB_USERNAME }}/fastapi-demo \
-              --set image.tag=${{ github.event.workflow_run.head_commit.id }} \
+              --set image.tag=${{ github.sha }} \
               --set image.pullPolicy=Always \
               --atomic \
               --namespace default
