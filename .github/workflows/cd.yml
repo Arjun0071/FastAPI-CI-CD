@@ -14,42 +14,27 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # -----------------------------
-      # Set up SSH key for VM access
-      # -----------------------------
-      - name: Set up SSH key
+      - name: Set up Kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.23.0' 
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v1
+        with:
+          version: 'v3.12.0' 
+
+      - name: Create kubeconfig file
+        run: echo "${{ secrets.KUBECONFIG }}" > ${{ github.workspace }}/kubeconfig
+
+      - name: Deploy FastAPI app using Helm
+        env:
+          KUBECONFIG: ${{ github.workspace }}/kubeconfig
         run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.VM_PRIVATE_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          echo -e "Host *\n\tStrictHostKeyChecking no\n" > ~/.ssh/config
-
-      # -----------------------------
-      # Copy Helm chart to VM
-      # -----------------------------
-      - name: Copy Helm chart to VM
-        uses: appleboy/scp-action@master
-        with:
-          host: ${{ secrets.VM_IP }}
-          username: ${{ secrets.VM_USER }}
-          key: ~/.ssh/id_rsa
-          source: "./demoapp-chart"
-          target: "/home/${{ secrets.VM_USER }}/"
-
-      # -----------------------------
-      # Deploy via SSH using Helm
-      # -----------------------------
-      - name: Deploy FastAPI app via SSH
-        uses: appleboy/ssh-action@v1.1.0
-        with:
-          host: ${{ secrets.VM_IP }}
-          username: ${{ secrets.VM_USER }}
-          key: ~/.ssh/id_rsa
-          script: |
-            cd /home/${{ secrets.VM_USER }}/demoapp-chart
-            helm upgrade --install demoapp . \
-              --set image.repository=${{ secrets.DOCKERHUB_USERNAME }}/fastapi-demo \
-              --set image.tag=${{ github.sha }} \
-              --set image.pullPolicy=Always \
-              --atomic \
-              --namespace default
+          cd demoapp-chart
+          helm upgrade --install demoapp . \
+            --set image.repository=${{ secrets.DOCKERHUB_USERNAME }}/fastapi-demo \
+            --set image.tag=${{ github.sha }} \
+            --set image.pullPolicy=Always \
+            --atomic \
+            --namespace default
