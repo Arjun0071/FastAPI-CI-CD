@@ -22,6 +22,7 @@ jobs:
           key: ${{ secrets.VM_SSH_KEY }}
           source: "./demoapp-chart"
           target: "/home/${{ secrets.VM_USER }}/"
+          scp_options: "-o StrictHostKeyChecking=no"
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.1.0
