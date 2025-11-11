@@ -1,40 +1,45 @@
-name: CD - Deploy FastAPI using Helm
+name: CD - Deploy FastAPI to Selected Cluster
 
 on:
-  workflow_run:
-    workflows: ["CI- Build and push the Docker Image"]
-    types:
-      - completed
+  workflow_dispatch:
+    inputs:
+      cluster:
+        description: 'Select cluster to deploy (kubespray or kubeadm)'
+        required: true
+        default: 'kubespray'
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
+      # Step 1: Checkout repository (optional, for logs or scripts)
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Set up Kubectl
-        uses: azure/setup-kubectl@v3
+      # Step 2: Start SSH agent with private key
+      - name: Setup SSH Agent
+        uses: webfactory/ssh-agent@v0.9.0
         with:
-          version: 'v1.23.0' 
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      - name: Set up Helm
-        uses: azure/setup-helm@v1
-        with:
-          version: 'v3.12.0' 
-
-      - name: Create kubeconfig file
-        run: echo "${{ secrets.KUBECONFIG }}" > ${{ github.workspace }}/kubeconfig
-
-      - name: Deploy FastAPI app using Helm
+      # Step 3: Deploy to selected cluster via jump server
+      - name: Deploy to Selected Cluster
         env:
-          KUBECONFIG: ${{ github.workspace }}/kubeconfig
+          JUMP_HOST: ${{ secrets.JUMP_HOST }}       # public IP of jump server
+          JUMP_USER: ${{ secrets.JUMP_USER }}       # SSH user
+          IMAGE_TAG: ${{ github.event.workflow_run.head_commit.id }}  # CI SHA
+          CLUSTER: ${{ github.event.inputs.cluster }}               # cluster choice
         run: |
-          cd demoapp-chart
-          helm upgrade --install demoapp . \
-            --set image.repository=${{ secrets.DOCKERHUB_USERNAME }}/fastapi-demo \
-            --set image.tag=${{ github.sha }} \
-            --set image.pullPolicy=Always \
-            --atomic \
-            --namespace default
+          echo "Deploying to cluster: $CLUSTER"
+          KUBECONFIG_FILE="~/.kube/config-$CLUSTER"
+          ssh -o StrictHostKeyChecking=no ${JUMP_USER}@${JUMP_HOST} "
+            export KUBECONFIG=$KUBECONFIG_FILE
+            echo 'Using kubeconfig: $KUBECONFIG_FILE'
+            helm upgrade --install demoapp /home/${JUMP_USER}/demoapp-chart \
+              --set image.repository=${{ secrets.DOCKERHUB_USERNAME }}/fastapi-demo \
+              --set image.tag=${IMAGE_TAG} \
+              --set image.pullPolicy=Always \
+              --namespace default \
+              --atomic
+          "
