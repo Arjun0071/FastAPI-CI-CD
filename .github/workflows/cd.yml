@@ -1,4 +1,4 @@
-name: CD - Deploy FastAPI via Helm on Master Node
+name: CD - Deploy FastAPI via Helm
 
 on:
   workflow_run:
@@ -9,20 +9,16 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
-      # Step 1: Checkout repository (optional)
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # Step 2: Start SSH agent with private key
-      - name: Setup SSH Agent
-        uses: webfactory/ssh-agent@v0.9.0
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.8.0
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      # Step 3: Upgrade Helm chart on Master Node via jump server
-      - name: Upgrade Helm chart on Master Node
+      - name: Deploy Updated Image via Jump Server
         env:
           JUMP_USER: ${{ secrets.JUMP_USER }}
           JUMP_HOST: ${{ secrets.JUMP_HOST }}
@@ -30,8 +26,8 @@ jobs:
           MASTER_IP: ${{ secrets.MASTER_IP }}
           IMAGE_TAG: ${{ github.event.workflow_run.head_commit.id }}
         run: |
-          echo "Upgrading Docker image ${IMAGE_TAG} on master node ${MASTER_IP}"
-
+          echo "Deploying Docker image ${IMAGE_TAG} to master node ${MASTER_IP}"
+          
           ssh -o StrictHostKeyChecking=no ${JUMP_USER}@${JUMP_HOST} "
             echo 'Connected to jump server. Forwarding to master node...'
             ssh -o StrictHostKeyChecking=no ${MASTER_USER}@${MASTER_IP} '
@@ -39,13 +35,13 @@ jobs:
               echo Using kubeconfig: ~/.kube/config
 
               # Verify Helm chart exists
-              if [ ! -d /home/azureuser/FastAPI-CI-CD/demoapp-chart ]; then
+              if [ ! -d /home/${MASTER_USER}/FastAPI-CI-CD/demoapp-chart ]; then
                 echo \"ERROR: Helm chart directory not found!\"
                 exit 1
               fi
 
-              # Upgrade existing release, reuse current values (preserves NodePort)
-              helm upgrade demoapp /home/azureuser/FastAPI-CI-CD/demoapp-chart \
+              # Upgrade existing release with the new image tag
+              helm upgrade --install fastapi-release /home/${MASTER_USER}/FastAPI-CI-CD/demoapp-chart \
                 --reuse-values \
                 --set image.repository=${{ secrets.DOCKERHUB_USERNAME }}/fastapi-demo \
                 --set image.tag=${IMAGE_TAG} \
