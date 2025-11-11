@@ -1,19 +1,14 @@
-name: CD - Deploy FastAPI to Selected Cluster
+name: CD - Deploy FastAPI via Helm on Master Node
 
 on:
   workflow_dispatch:
-    inputs:
-      cluster:
-        description: 'Select cluster to deploy (kubespray or kubeadm)'
-        required: true
-        default: 'kubespray'
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout repository (optional, for logs or scripts)
+      # Step 1: Checkout repo (optional)
       - name: Checkout repository
         uses: actions/checkout@v3
 
@@ -23,23 +18,34 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      # Step 3: Deploy to selected cluster via jump server
-      - name: Deploy to Selected Cluster
+      # Step 3: Deploy Helm chart on Master Node via jump server
+      - name: Deploy Helm chart on Master Node
         env:
-          JUMP_HOST: ${{ secrets.JUMP_HOST }}       # public IP of jump server
-          JUMP_USER: ${{ secrets.JUMP_USER }}       # SSH user
-          IMAGE_TAG: ${{ github.event.workflow_run.head_commit.id }}  # CI SHA
-          CLUSTER: ${{ github.event.inputs.cluster }}               # cluster choice
+          JUMP_USER: ${{ secrets.JUMP_USER }}
+          JUMP_HOST: ${{ secrets.JUMP_HOST }}
+          MASTER_USER: ${{ secrets.MASTER_USER }}
+          MASTER_IP: ${{ secrets.MASTER_IP }}
+          IMAGE_TAG: ${{ github.event.workflow_run.head_commit.id }}
         run: |
-          echo "Deploying to cluster: $CLUSTER"
-          KUBECONFIG_FILE="~/.kube/config-$CLUSTER"
+          echo "Deploying Docker image ${IMAGE_TAG} to master node ${MASTER_IP}"
+
           ssh -o StrictHostKeyChecking=no ${JUMP_USER}@${JUMP_HOST} "
-            export KUBECONFIG=$KUBECONFIG_FILE
-            echo 'Using kubeconfig: $KUBECONFIG_FILE'
-            helm upgrade --install demoapp /home/${JUMP_USER}/demoapp-chart \
-              --set image.repository=${{ secrets.DOCKERHUB_USERNAME }}/fastapi-demo \
-              --set image.tag=${IMAGE_TAG} \
-              --set image.pullPolicy=Always \
-              --namespace default \
-              --atomic
+            echo 'Connected to jump server. Forwarding to master node...'
+            ssh -o StrictHostKeyChecking=no ${MASTER_USER}@${MASTER_IP} '
+              # Verify Helm chart exists
+              if [ ! -d /home/azureuser/FastAPI-CI-CD/demoapp-chart ]; then
+                echo \"ERROR: Helm chart directory not found!\"
+                exit 1
+              fi
+
+              # Set kubeconfig and deploy using Helm
+              export KUBECONFIG=~/.kube/config
+              echo Using kubeconfig: ~/.kube/config
+              helm upgrade --install demoapp /home/azureuser/FastAPI-CI-CD/demoapp-chart \
+                --set image.repository=${{ secrets.DOCKERHUB_USERNAME }}/fastapi-demo \
+                --set image.tag=${IMAGE_TAG} \
+                --set image.pullPolicy=Always \
+                --namespace default \
+                --atomic
+            '
           "
